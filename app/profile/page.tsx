@@ -1,8 +1,23 @@
 'use client';
 
-import React from 'react';
+import { AppEnvironment } from '@/hooks/useApp';
+import Image from 'next/image';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 
 export default function Profile() {
+
+  const { account, getTokenURIsByOwner } = useContext(AppEnvironment)
+
+  const [uris, setUris] = useState<string[]>([])
+
+  useEffect(() => {
+    if (account) {
+      (async function () {
+        setUris(await getTokenURIsByOwner());
+      })()
+    }
+  }, [account])
+
   return (
     <div className="relative h-full w-full bg-gray-900 p-3">
       <h1 className="text-2xl font-bold text-white my-6">Profile</h1>
@@ -44,9 +59,9 @@ export default function Profile() {
         <div className="bg-gray-800 rounded-lg p-4">
           <h3 className="text-lg font-semibold text-white mb-3">Recent NFTs</h3>
           <div className="grid grid-cols-2 gap-4">
-            {[1, 2, 3, 4].map((item) => (
-              <div key={item} className="aspect-square rounded-lg bg-gray-700 flex items-center justify-center">
-                <span className="text-gray-400">NFT #{item}</span>
+            {uris.map((item, i) => (
+              <div key={`nft-${i}`} className="aspect-square rounded-lg bg-gray-700 flex items-center justify-center overflow-hidden">
+                <img src={item} width={200} height={200} alt="nft" className="" />
               </div>
             ))}
           </div>
