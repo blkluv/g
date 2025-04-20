@@ -25,7 +25,7 @@ export default function Profile() {
     <div className="min-h-screen bg-gray-900 p-4">
       <div className="relative max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-white my-6">Profile</h1>
-        <div className="space-y-6 h-[calc(100vh-16rem)] overflow-y-auto pr-2">
+        <div className="space-y-6 h-7/12 overflow-y-auto pr-2">
           <div className="flex items-center space-x-4">
             <div className="w-20 h-20 rounded-full bg-purple-600 flex items-center justify-center">
               <span className="text-2xl text-white">SN</span>

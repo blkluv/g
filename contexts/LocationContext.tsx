@@ -20,7 +20,7 @@ const defaultLocation = {
 export const LocationContext = createContext<LocationContextType>({
   latitude: defaultLocation.latitude,
   longitude: defaultLocation.longitude,
-  isTestLocation: true,
+  isTestLocation: false,
   setTestLocation: () => {}
 });
 
@@ -46,7 +46,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     } else {
       setLocation(defaultLocation);
     }
-  }, [isTestLocation]);
+  }, [location]);
 
   const value = {
     latitude: location.latitude,

@@ -30,7 +30,7 @@ export default function AddLandmark() {
     if (!account || !name || !image) return;
 
     try {
-      await registerLandmark(name, image, latitude, longitude, pathIndex);
+      await registerLandmark(name, image, latitude, longitude, 0);
       router.push('/profile');
     } catch (error) {
       console.error('Error registering landmark:', error);
@@ -99,19 +99,6 @@ export default function AddLandmark() {
                     Upload Image
                   </label>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Path Index
-                </label>
-                <input
-                  type="number"
-                  value={pathIndex}
-                  onChange={(e) => setPathIndex(parseInt(e.target.value))}
-                  className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="Enter path index"
-                />
               </div>
 
               <button
