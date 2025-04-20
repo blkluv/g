@@ -7,9 +7,19 @@ import { PlusIcon } from '@heroicons/react/24/outline';
 import { Landmark } from '@/hooks/useApp';
 
 export default function Profile() {
-  const { account, getOwnedLandmarks } = useApp();
+  const { account, getOwnedLandmarks, getTokenURIsByOwner } = useApp();
   const router = useRouter();
   const [landmarks, setLandmarks] = useState<Landmark[]>([]);
+
+  const [uris, setUris] = useState<string[]>([])
+
+  useEffect(() => {
+    if (account) {
+      (async function () {
+        setUris(await getTokenURIsByOwner());
+      })()
+    }
+  }, [account])
 
   useEffect(() => {
     const fetchLandmarks = async () => {
@@ -61,13 +71,12 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Recent NFTs */}
           <div className="bg-gray-800 rounded-lg p-4">
             <h3 className="text-lg font-semibold text-white mb-3">Recent NFTs</h3>
             <div className="grid grid-cols-2 gap-4">
-              {[1, 2, 3, 4].map((item) => (
-                <div key={item} className="aspect-square rounded-lg bg-gray-700 flex items-center justify-center">
-                  <span className="text-gray-400">NFT #{item}</span>
+              {uris.map((item, i) => (
+                <div key={`nft-${i}`} className="aspect-square rounded-lg bg-gray-700 flex items-center justify-center overflow-hidden">
+                  <img src={item} width={200} height={200} alt="nft" className="" />
                 </div>
               ))}
             </div>
@@ -108,6 +117,7 @@ export default function Profile() {
                     </div>
                   </div>
                 ))}
+
               </div>
             )}
           </div>
