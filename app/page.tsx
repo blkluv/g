@@ -40,6 +40,7 @@ export default function Home() {
     };
 
     // Always fetch landmarks when location changes
+    console.log(latitude, longitude)
     fetchLandmarks(latitude, longitude);
   }, [getNearbyLandmarkData, latitude, longitude]);
 
@@ -55,27 +56,26 @@ export default function Home() {
 
       {/* Map Container */}
       <div className="absolute inset-2 pt-16 pb-28">
-        <Map 
-          challenges={nearbyLandmarks} 
+        <Map
+          challenges={nearbyLandmarks}
           onChallengeSelect={handleChallengeSelect}
           activeChallenge={selectedChallenge}
         />
       </div>
 
       {/* Nearby Challenges */}
-      <div 
-        className={`absolute bottom-20 left-2 right-2 h-[33vh] bg-gray-800/90 backdrop-blur-sm rounded-t-2xl transition-transform duration-300 ${
-          showNearby ? 'translate-y-0' : 'translate-y-[calc(100%-2rem)]'
-        }`}
+      <div
+        className={`absolute bottom-20 left-2 right-2 h-[33vh] bg-gray-800/90 backdrop-blur-sm rounded-t-2xl transition-transform duration-300 ${showNearby ? 'translate-y-0' : 'translate-y-[calc(100%-2rem)]'
+          }`}
       >
         {/* Drag Handle */}
         <div className="sticky top-0 left-0 right-0 bg-gray-800/90 backdrop-blur-sm pt-3 pb-2 rounded-t-2xl z-10">
-          <div 
+          <div
             className="h-1.5 w-12 bg-gray-600 rounded-full mx-auto cursor-pointer"
             onClick={() => setShowNearby(!showNearby)}
           />
         </div>
-        
+
         <div className="p-4 max-h-[33vh] overflow-y-auto">
           <h2 className="text-lg font-semibold text-white mb-4">Nearby Challenges</h2>
           <div className="space-y-3">
@@ -104,23 +104,23 @@ export default function Home() {
           <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full">
             <div className="flex justify-between items-start mb-4">
               <h2 className="text-xl font-bold text-white">{selectedChallenge.title}</h2>
-              <button 
+              <button
                 onClick={() => setSelectedChallenge(null)}
                 className="text-gray-400 hover:text-white"
               >
                 <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
-            
+
             <p className="text-gray-300 mb-4">{selectedChallenge.description}</p>
-            
+
             <div className="flex justify-between items-center mb-6">
               <span className="text-yellow-500 font-semibold">{selectedChallenge.points}pts</span>
               <span className="text-gray-400 text-sm">Photo Challenge</span>
             </div>
 
             {account ? (
-              <button 
+              <button
                 onClick={() => {
                   // Handle starting the challenge
                   window.location.href = '/camera';
@@ -130,7 +130,7 @@ export default function Home() {
                 Start Challenge
               </button>
             ) : (
-              <button 
+              <button
                 onClick={() => {
                   // Handle connecting wallet
                   window.location.href = '/admin';
