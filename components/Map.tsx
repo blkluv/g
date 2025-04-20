@@ -26,9 +26,10 @@ interface MapProps {
   challenges: Challenge[];
   onChallengeSelect: (challenge: Challenge) => void;
   activeChallenge?: Challenge | null;
+  onClick?: (e: mapboxgl.MapMouseEvent) => void;
 }
 
-export default function Map({ challenges, onChallengeSelect, activeChallenge }: MapProps) {
+export default function Map({ challenges, onChallengeSelect, activeChallenge, onClick }: MapProps) {
   const mapRef = useRef<mapboxgl.Map | undefined>(undefined);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<{ [key: string]: mapboxgl.Marker }>({});
@@ -60,8 +61,10 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge }: 
 
     mapRef.current = map;
 
-    // Add navigation controls
-    // map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    // Add click handler if provided
+    if (onClick) {
+      map.on('click', onClick);
+    }
 
     // Add initial user marker
     const el = document.createElement('div');
@@ -71,9 +74,12 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge }: 
       .addTo(map);
 
     return () => {
+      if (onClick) {
+        map.off('click', onClick);
+      }
       map.remove();
     };
-  }, []);
+  }, [onClick]);
 
   // Update map center and user marker when location changes
   useEffect(() => {
