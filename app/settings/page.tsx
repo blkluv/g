@@ -109,7 +109,7 @@ export default function Settings() {
             onClick={handleSignOut}
             className="w-full bg-red-600/20 text-red-500 py-3 rounded-lg mt-6 hover:bg-red-600/30 transition-colors"
           >
-            Sign Out
+            Disconnect Wallet
           </button>
         </div>
       </div>

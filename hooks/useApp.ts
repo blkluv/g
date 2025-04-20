@@ -25,6 +25,7 @@ interface IAppEnvironment {
   disconnectAccount: () => Promise<void>;
   getNearbyLandmarkData: (lat: number, lng: number) => Promise<Landmark[]>;
   getVisitedLandmarks: (user?: string) => Promise<Landmark[]>;
+  getOwnedLandmarks: (user?: string) => Promise<Landmark[]>;
   getTokenURIsByOwner: (user?: string) => Promise<string[]>;
   visitLandmark: (landmarkId: number, image: File, userLat?: number, userLng?: number) => Promise<void>;
   hasUserVisited: (landmarkId: number) => Promise<boolean>;
@@ -40,6 +41,7 @@ export const AppEnvironment = createContext<IAppEnvironment>({
   hasUserVisited: async () => false,
   getNearbyLandmarkData: async () => [],
   getVisitedLandmarks: async () => [],
+  getOwnedLandmarks: async () => [],
   getTokenURIsByOwner: async () => [],
   visitLandmark: async () => {},
   registerLandmark: async () => {},
@@ -315,6 +317,30 @@ export default function useApp(): IAppEnvironment {
     }
   }
 
+  async function getOwnedLandmarks(user?: string): Promise<Landmark[]> {
+    let address = user ?? account;
+    if (!address) return [];
+
+    const landmarks = await readContract(config, {
+      address: process.env.NEXT_PUBLIC_LANDMARK_REG_ADDR as `0x${string}`,
+      abi: LandmarkRegistryAbi.abi,
+      functionName: 'getLandmarksByOwner',
+      args: [address],
+    }) as any;
+
+    const data = landmarks.map((l: any) => ({
+      id: Number(l.id),
+      owner: l.owner,
+      name: l.name,
+      imageUri: l.imageURI,
+      lat: Number(l.lat) / 1_000_000,
+      lng: Number(l.lng) / 1_000_000,
+      pathIndex: l.pathIndex
+    }));
+
+    return data;
+  }
+
   return {
     account,
     connectAccount,
@@ -325,6 +351,7 @@ export default function useApp(): IAppEnvironment {
     registerLandmark,
     hasUserVisited,
     getVisitedLandmarks,
+    getOwnedLandmarks,
     getTokenURIsByOwner,
     verifyLocation
   }
