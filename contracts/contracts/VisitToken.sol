@@ -7,19 +7,35 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract VisitToken is ERC721, ERC721URIStorage, Ownable {
     uint256 private _nextTokenId;
+    mapping(address => uint256[]) public ownerToTokens;
 
     constructor(
         address initialOwner
     ) ERC721("VisitToken", "CVST") Ownable(initialOwner) {}
 
-    function safeMint(
-        address to,
-        string memory uri
-    ) public onlyOwner returns (uint256) {
+    function safeMint(address to, string memory uri) public returns (uint256) {
         uint256 tokenId = _nextTokenId++;
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
+        ownerToTokens[to].push(tokenId);
         return tokenId;
+    }
+
+    function getTokensByOwner(
+        address owner
+    ) external view returns (uint256[] memory) {
+        return ownerToTokens[owner];
+    }
+
+    function getTokenURIsByOwner(
+        address owner
+    ) external view returns (string[] memory) {
+        uint256 k = ownerToTokens[owner].length;
+        string[] memory uris = new string[](k);
+        for (uint256 j = 0; j < k; j++) {
+            uris[j] = super.tokenURI(ownerToTokens[owner][j]);
+        }
+        return uris;
     }
 
     // The following functions are overrides required by Solidity.

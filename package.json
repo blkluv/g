@@ -12,6 +12,7 @@
     "@wagmi/connectors": "^5.7.12",
     "@wagmi/core": "^2.16.7",
     "next": "15.3.1",
+    "pinata": "^2.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "viem": "^2.27.2"

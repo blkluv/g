@@ -6,74 +6,102 @@ import "./VisitToken.sol";
 contract LandmarkRegistry {
     VisitToken public visitToken;
 
-    // Grid precision: 0.001 degrees (~111 meters)
-    int constant PRECISION = 1000;
+    int constant PRECISION = 500; // 0.002 degrees
+    uint256 public nextLandmarkId;
 
     struct Landmark {
+        uint256 id;
+        string name;
+        string imageURI;
         int lat;
         int lng;
-        uint256 tokenId;
         address owner;
+        int pathIndex;
     }
 
-    // grid[lat][lng] => visit token ids
-    mapping(int => mapping(int => uint256[])) public grid;
-
+    // Mapping of landmarkId to landmark info
     mapping(uint256 => Landmark) public landmarks;
 
-    event LandmarkCreated(
-        uint256 indexed tokenId,
+    // Grid-based lookup
+    mapping(int => mapping(int => uint256[])) public grid;
+
+    // Track visits: landmarkId => visitor => bool
+    mapping(uint256 => mapping(address => bool)) public hasVisited;
+
+    mapping(address => uint256[]) public visitedLandmarks;
+
+    event LandmarkRegistered(
+        uint256 indexed id,
         address indexed owner,
+        string name,
         int lat,
         int lng
     );
 
-    constructor(address tokenAddr) {
-        visitToken = VisitToken(tokenAddr);
+    event VisitMinted(
+        uint256 indexed tokenId,
+        address indexed visitor,
+        uint256 indexed landmarkId
+    );
+
+    constructor(address _visitToken) {
+        visitToken = VisitToken(_visitToken);
     }
 
     function _gridCoord(int coord) internal pure returns (int) {
         return coord / PRECISION;
     }
 
-    function createMarker(int lat, int lng, string memory tokenURI) external {
-        uint256 tokenId = visitToken.safeMint(msg.sender, tokenURI);
-        int latIndex = _gridCoord(lat);
-        int lngIndex = _gridCoord(lng);
-
-        grid[latIndex][lngIndex].push(tokenId);
-        landmarks[tokenId] = Landmark(lat, lng, tokenId, msg.sender);
-
-        emit LandmarkCreated(tokenId, msg.sender, lat, lng);
-    }
-
-    // Returns nearby marker tokenIds within a grid window
-    function getMarkersNearby(
+    function registerLandmark(
+        string memory name,
+        string memory imageUri,
         int lat,
         int lng,
-        int range
-    ) external view returns (uint256[] memory) {
-        int latIndex = _gridCoord(lat);
-        int lngIndex = _gridCoord(lng);
+        int pathIndex
+    ) external {
+        uint256 id = nextLandmarkId++;
+
+        landmarks[id] = Landmark({
+            id: id,
+            name: name,
+            imageURI: imageUri,
+            lat: lat,
+            lng: lng,
+            owner: msg.sender,
+            pathIndex: pathIndex
+        });
+
+        int latIdx = _gridCoord(lat);
+        int lngIdx = _gridCoord(lng);
+        grid[latIdx][lngIdx].push(id);
+
+        emit LandmarkRegistered(id, msg.sender, name, lat, lng);
+    }
+
+    function getNearbyLandmarks(
+        int lat,
+        int lng
+    ) external view returns (Landmark[] memory) {
+        int latIdx = _gridCoord(lat);
+        int lngIdx = _gridCoord(lng);
 
         uint256 count = 0;
 
-        // 1st pass to get count
-        for (int i = -range; i <= range; i++) {
-            for (int j = -range; j <= range; j++) {
-                count += grid[latIndex + i][lngIndex + j].length;
+        // access 3x3 grid around user's grid cell
+        for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                count += grid[latIdx + i][lngIdx + j].length;
             }
         }
 
-        uint256[] memory result = new uint256[](count);
+        Landmark[] memory result = new Landmark[](count);
         uint256 k = 0;
 
-        // 2nd pass to collect tokens
-        for (int i = -range; i <= range; i++) {
-            for (int j = -range; j <= range; j++) {
-                uint256[] storage cell = grid[latIndex + i][lngIndex + j];
+        for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                uint256[] storage cell = grid[latIdx + i][lngIdx + j];
                 for (uint m = 0; m < cell.length; m++) {
-                    result[k++] = cell[m];
+                    result[k++] = landmarks[cell[m]];
                 }
             }
         }
@@ -81,10 +109,40 @@ contract LandmarkRegistry {
         return result;
     }
 
-    function getMarkerInfo(
-        uint256 tokenId
-    ) external view returns (int, int, address) {
-        Landmark memory m = landmarks[tokenId];
-        return (m.lat, m.lng, m.owner);
+    function getVisitedLandmarks(
+        address user
+    ) external view returns (Landmark[] memory) {
+        uint256 k = visitedLandmarks[user].length;
+        Landmark[] memory result = new Landmark[](k);
+
+        for (uint256 i = 0; i < k; i++) {
+            result[i] = landmarks[(visitedLandmarks[user])[i]];
+        }
+
+        return result;
+    }
+
+    function visitLandmark(
+        uint256 landmarkId,
+        string memory pictureUri
+    ) external {
+        require(
+            landmarks[landmarkId].owner != address(0),
+            "Landmark does not exist"
+        );
+        // require(!hasVisited[landmarkId][msg.sender], "Already visited");
+
+        hasVisited[landmarkId][msg.sender] = true;
+        uint256 tokenId = visitToken.safeMint(msg.sender, pictureUri);
+        visitedLandmarks[msg.sender].push(landmarkId);
+
+        emit VisitMinted(tokenId, msg.sender, landmarkId);
+    }
+
+    function hasUserVisited(
+        uint256 landmarkId,
+        address user
+    ) external view returns (bool) {
+        return hasVisited[landmarkId][user];
     }
 }
