@@ -8,8 +8,8 @@ import { AppEnvironment } from '@/hooks/useApp';
 import { useLocation } from '@/hooks/useLocation';
 
 // Mobile performance tweaks
-mapboxgl.workerCount = 2; // Reduce worker threads on mobile
-mapboxgl.maxParallelImageRequests = 4; // Limit concurrent image loads
+mapboxgl.workerCount = 2;
+mapboxgl.maxParallelImageRequests = 4;
 
 export interface Challenge {
   id: string;
@@ -32,29 +32,28 @@ interface MapProps {
 }
 
 export default function Map({ challenges, onChallengeSelect, activeChallenge, onClick }: MapProps) {
-  const mapRef = useRef<mapboxgl.Map | undefined>(undefined);
+  const mapRef = useRef<mapboxgl.Map>();
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const markersRef = useRef<{ [key: string]: mapboxgl.Marker }>({});
-  const userMarkerRef = useRef<mapboxgl.Marker | undefined>(undefined);
-  const directionsRef = useRef<any>(null);
+  const markersRef = useRef<Record<string, mapboxgl.Marker>>({});
+  const userMarkerRef = useRef<mapboxgl.Marker>();
+  const directionsRef = useRef<boolean>(false);
+
   const { account, hasUserVisited } = useContext(AppEnvironment);
   const { latitude, longitude } = useLocation();
 
-  // Preloaded emoji markers
   const emojiMarkers = useRef({
     photo: '📸',
     location: '📍',
-    visited: '✅'
+    visited: '✅',
   });
 
-  // Initialize map with mobile optimizations
   useEffect(() => {
     if (!mapContainerRef.current || !process.env.NEXT_PUBLIC_MAPBOX_TOKEN) return;
 
-    const selectedStyle = typeof window !== 'undefined' 
+    const selectedStyle = typeof window !== 'undefined'
       ? localStorage.getItem('mapStyle') || 'dark'
       : 'dark';
-    
+
     const styleUrl = mapStyles.find(style => style.id === selectedStyle)?.url || 'mapbox://styles/mapbox/dark-v11';
 
     const map = new mapboxgl.Map({
@@ -65,13 +64,12 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
       interactive: true,
       touchZoomRotate: true,
       trackResize: true,
-      antialias: false, // Better mobile performance
-      attributionControl: false, // Fewer DOM elements
-      preserveDrawingBuffer: true, // Helps with WebGL on mobile
-      maxTileCacheSize: 20, // Reduce memory usage
+      antialias: false,
+      attributionControl: false,
+      preserveDrawingBuffer: true,
+      maxTileCacheSize: 20,
     });
 
-    // Mobile-specific event handlers
     map.on('touchstart', (e) => {
       if (e.originalEvent.touches.length > 1) {
         e.preventDefault();
@@ -88,59 +86,58 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
       map.on('click', onClick);
     }
 
-    // User marker with emoji
     const userEl = document.createElement('div');
-    userEl.className = 'text-xl'; // Emoji size
-    userEl.textContent = '👤'; // User emoji
+    userEl.className = 'text-xl';
+    userEl.textContent = '👤';
+
     userMarkerRef.current = new mapboxgl.Marker(userEl)
       .setLngLat([longitude, latitude])
       .addTo(map);
 
     return () => {
-      map.off('click', onClick);
+      if (onClick) {
+        map.off('click', onClick);
+      }
       map.remove();
     };
   }, [onClick]);
 
-  // Throttled location updates for mobile
   const updateMapCenter = useCallback((lng: number, lat: number) => {
     if (!mapRef.current || !userMarkerRef.current) return;
-    
+
     mapRef.current.easeTo({
       center: [lng, lat],
-      duration: 1000, // Smoother transition
-      essential: true // Bypasses user gestures
+      duration: 1000,
+      essential: true,
     });
-    
+
     userMarkerRef.current.setLngLat([lng, lat]);
   }, []);
 
   useEffect(() => {
     updateMapCenter(longitude, latitude);
+
     if (activeChallenge?.type === 'location') {
       updateDirections([longitude, latitude], activeChallenge.coordinates);
     }
   }, [latitude, longitude, activeChallenge, updateMapCenter]);
 
-  // Create marker with emoji
   const createMarker = useCallback((challenge: Challenge, visited: boolean) => {
     const el = document.createElement('div');
-    el.className = 'text-2xl cursor-pointer'; // Larger emoji
-    
-    // Use emoji instead of SVG
+    el.className = 'text-2xl cursor-pointer';
+
     if (visited) {
       el.textContent = emojiMarkers.current.visited;
       el.style.filter = 'grayscale(0.5) opacity(0.8)';
     } else {
-      el.textContent = challenge.type === 'photo' 
-        ? emojiMarkers.current.photo 
+      el.textContent = challenge.type === 'photo'
+        ? emojiMarkers.current.photo
         : emojiMarkers.current.location;
     }
 
     return el;
   }, []);
 
-  // Handle challenges with memoized markers
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -148,30 +145,29 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
       Object.values(markersRef.current).forEach(marker => marker.remove());
       markersRef.current = {};
 
-      for (const challenge of challenges) {
+      await Promise.all(challenges.map(async (challenge) => {
         const visited = account ? await hasUserVisited(Number(challenge.id)) : false;
         const markerEl = createMarker(challenge, visited);
 
         const marker = new mapboxgl.Marker(markerEl)
           .setLngLat(challenge.coordinates)
           .setPopup(
-            new mapboxgl.Popup({ offset: 25 })
-              .setHTML(`
-                <div class="p-2 max-w-xs">
-                  <h3 class="font-bold text-lg">${challenge.title}</h3>
-                  <p class="text-sm text-gray-300">${challenge.description}</p>
-                  <div class="mt-2 flex items-center justify-between">
-                    <span class="text-yellow-500 font-semibold">${challenge.points}pts</span>
-                    ${visited ? '<span class="text-green-500 text-sm">Visited</span>' : ''}
-                  </div>
+            new mapboxgl.Popup({ offset: 25 }).setHTML(`
+              <div class="p-2 max-w-xs">
+                <h3 class="font-bold text-lg">${challenge.title}</h3>
+                <p class="text-sm text-gray-300">${challenge.description}</p>
+                <div class="mt-2 flex items-center justify-between">
+                  <span class="text-yellow-500 font-semibold">${challenge.points}pts</span>
+                  ${visited ? '<span class="text-green-500 text-sm">Visited</span>' : ''}
                 </div>
-              `)
+              </div>
+            `)
           )
           .addTo(mapRef.current!);
 
         markerEl.addEventListener('click', () => onChallengeSelect(challenge));
         markersRef.current[challenge.id] = marker;
-      }
+      }));
     };
 
     updateMarkers();
@@ -181,7 +177,6 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
     };
   }, [challenges, onChallengeSelect, account, hasUserVisited, createMarker]);
 
-  // Directions with mobile optimizations
   const updateDirections = useCallback(async (start: [number, number], end: [number, number]) => {
     if (!mapRef.current) return;
 
@@ -192,7 +187,7 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
         `https://api.mapbox.com/directions/v5/mapbox/walking/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&overview=simplified&access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}`
       );
       const json = await query.json();
-      const route = json.routes[0]?.geometry?.coordinates;
+      const route = json.routes?.[0]?.geometry?.coordinates;
 
       if (!route) return;
 
@@ -221,19 +216,16 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
           },
           paint: {
             'line-color': '#3b82f6',
-            'line-width': 3, // Thinner line for mobile
+            'line-width': 3,
             'line-opacity': 0.8
           }
         });
       }
 
-      const bounds = new mapboxgl.LngLatBounds()
-        .extend(start)
-        .extend(end);
-
+      const bounds = new mapboxgl.LngLatBounds().extend(start).extend(end);
       mapRef.current.fitBounds(bounds, {
-        padding: { top: 50, bottom: 50, left: 25, right: 25 }, // Smaller padding on mobile
-        maxZoom: 15 // Prevent over-zooming
+        padding: { top: 50, bottom: 50, left: 25, right: 25 },
+        maxZoom: 15
       });
 
       directionsRef.current = true;
@@ -252,15 +244,15 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
       mapRef.current.removeSource('route');
     }
 
-    directionsRef.current = null;
+    directionsRef.current = false;
   }, []);
 
   return (
-    <div className="w-full h-full rounded-2xl overflow-hidden touch-none"> {/* Disable touch events on container */}
-      <div 
-        ref={mapContainerRef} 
+    <div className="w-full h-full rounded-2xl overflow-hidden touch-none">
+      <div
+        ref={mapContainerRef}
         className="w-full h-full"
-        style={{ touchAction: 'none' }} // Better touch control
+        style={{ touchAction: 'none' }}
       />
     </div>
   );
