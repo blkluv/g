@@ -1,12 +1,15 @@
 'use client';
 
-import React, { useEffect, useRef, useContext } from 'react';
+import React, { useEffect, useRef, useContext, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { mapStyles } from '../app/types/map';
 import { AppEnvironment } from '@/hooks/useApp';
 import { useLocation } from '@/hooks/useLocation';
 
+// Mobile performance tweaks
+mapboxgl.workerCount = 2; // Reduce worker threads on mobile
+mapboxgl.maxParallelImageRequests = 4; // Limit concurrent image loads
 
 export interface Challenge {
   id: string;
@@ -16,7 +19,6 @@ export interface Challenge {
   type: 'photo' | 'location';
   points: number;
   distance?: number;
-  // blockchain-related properties
   owner: string;
   imageUri: string;
   pathIndex: number;
@@ -38,18 +40,21 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
   const { account, hasUserVisited } = useContext(AppEnvironment);
   const { latitude, longitude } = useLocation();
 
-  // Initialize map
+  // Preloaded emoji markers
+  const emojiMarkers = useRef({
+    photo: '📸',
+    location: '📍',
+    visited: '✅'
+  });
+
+  // Initialize map with mobile optimizations
   useEffect(() => {
     if (!mapContainerRef.current || !process.env.NEXT_PUBLIC_MAPBOX_TOKEN) return;
 
-    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-    
-    // Get the selected style from localStorage
     const selectedStyle = typeof window !== 'undefined' 
       ? localStorage.getItem('mapStyle') || 'dark'
       : 'dark';
     
-    // Find the style URL from our predefined styles
     const styleUrl = mapStyles.find(style => style.id === selectedStyle)?.url || 'mapbox://styles/mapbox/dark-v11';
 
     const map = new mapboxgl.Map({
@@ -57,74 +62,102 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
       style: styleUrl,
       center: [longitude, latitude],
       zoom: 15,
+      interactive: true,
+      touchZoomRotate: true,
+      trackResize: true,
+      antialias: false, // Better mobile performance
+      attributionControl: false, // Fewer DOM elements
+      preserveDrawingBuffer: true, // Helps with WebGL on mobile
+      maxTileCacheSize: 20, // Reduce memory usage
+    });
+
+    // Mobile-specific event handlers
+    map.on('touchstart', (e) => {
+      if (e.originalEvent.touches.length > 1) {
+        e.preventDefault();
+      }
+    });
+
+    map.on('error', (e) => {
+      console.error('Map error:', e.error);
     });
 
     mapRef.current = map;
 
-    // Add click handler if provided
     if (onClick) {
       map.on('click', onClick);
     }
 
-    // Add initial user marker
-    const el = document.createElement('div');
-    el.className = 'w-4 h-4 bg-blue-500 rounded-full border-2 border-white';
-    userMarkerRef.current = new mapboxgl.Marker(el)
+    // User marker with emoji
+    const userEl = document.createElement('div');
+    userEl.className = 'text-xl'; // Emoji size
+    userEl.textContent = '👤'; // User emoji
+    userMarkerRef.current = new mapboxgl.Marker(userEl)
       .setLngLat([longitude, latitude])
       .addTo(map);
 
     return () => {
-      if (onClick) {
-        map.off('click', onClick);
-      }
+      map.off('click', onClick);
       map.remove();
     };
   }, [onClick]);
 
-  // Update map center and user marker when location changes
+  // Throttled location updates for mobile
+  const updateMapCenter = useCallback((lng: number, lat: number) => {
+    if (!mapRef.current || !userMarkerRef.current) return;
+    
+    mapRef.current.easeTo({
+      center: [lng, lat],
+      duration: 1000, // Smoother transition
+      essential: true // Bypasses user gestures
+    });
+    
+    userMarkerRef.current.setLngLat([lng, lat]);
+  }, []);
+
   useEffect(() => {
-    if (mapRef.current && userMarkerRef.current) {
-      mapRef.current.setCenter([longitude, latitude]);
-      userMarkerRef.current.setLngLat([longitude, latitude]);
-
-      // If there's an active location challenge, update directions
-      if (activeChallenge?.type === 'location') {
-        updateDirections([longitude, latitude], activeChallenge.coordinates);
-      }
+    updateMapCenter(longitude, latitude);
+    if (activeChallenge?.type === 'location') {
+      updateDirections([longitude, latitude], activeChallenge.coordinates);
     }
-  }, [latitude, longitude, activeChallenge]);
+  }, [latitude, longitude, activeChallenge, updateMapCenter]);
 
-  // Handle challenges
+  // Create marker with emoji
+  const createMarker = useCallback((challenge: Challenge, visited: boolean) => {
+    const el = document.createElement('div');
+    el.className = 'text-2xl cursor-pointer'; // Larger emoji
+    
+    // Use emoji instead of SVG
+    if (visited) {
+      el.textContent = emojiMarkers.current.visited;
+      el.style.filter = 'grayscale(0.5) opacity(0.8)';
+    } else {
+      el.textContent = challenge.type === 'photo' 
+        ? emojiMarkers.current.photo 
+        : emojiMarkers.current.location;
+    }
+
+    return el;
+  }, []);
+
+  // Handle challenges with memoized markers
   useEffect(() => {
     if (!mapRef.current) return;
 
-    // Clear existing markers
-    Object.values(markersRef.current).forEach(marker => marker.remove());
-    markersRef.current = {};
+    const updateMarkers = async () => {
+      Object.values(markersRef.current).forEach(marker => marker.remove());
+      markersRef.current = {};
 
-    // Add challenge markers
-    challenges.forEach(async (challenge) => {
-      const visited = account ? await hasUserVisited(Number(challenge.id)) : false;
-      
-      const el = document.createElement('div');
-      el.className = `w-8 h-8 ${
-        visited ? 'bg-green-600' : (challenge.type === 'photo' ? 'bg-purple-600' : 'bg-green-600')
-      } rounded-full flex items-center justify-center cursor-pointer shadow-lg`;
-      
-      const icon = document.createElement('div');
-      icon.className = 'w-4 h-4 text-white';
-      icon.innerHTML = challenge.type === 'photo' 
-        ? '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>'
-        : '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>';
-      el.appendChild(icon);
+      for (const challenge of challenges) {
+        const visited = account ? await hasUserVisited(Number(challenge.id)) : false;
+        const markerEl = createMarker(challenge, visited);
 
-      if (mapRef.current) {
-        const marker = new mapboxgl.Marker(el)
+        const marker = new mapboxgl.Marker(markerEl)
           .setLngLat(challenge.coordinates)
           .setPopup(
             new mapboxgl.Popup({ offset: 25 })
               .setHTML(`
-                <div class="p-2">
+                <div class="p-2 max-w-xs">
                   <h3 class="font-bold text-lg">${challenge.title}</h3>
                   <p class="text-sm text-gray-300">${challenge.description}</p>
                   <div class="mt-2 flex items-center justify-between">
@@ -134,35 +167,35 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
                 </div>
               `)
           )
-          .addTo(mapRef.current);
+          .addTo(mapRef.current!);
 
-        el.addEventListener('click', () => onChallengeSelect(challenge));
+        markerEl.addEventListener('click', () => onChallengeSelect(challenge));
         markersRef.current[challenge.id] = marker;
       }
-    });
+    };
+
+    updateMarkers();
 
     return () => {
       Object.values(markersRef.current).forEach(marker => marker.remove());
-      markersRef.current = {};
     };
-  }, [challenges, onChallengeSelect, account, hasUserVisited]);
+  }, [challenges, onChallengeSelect, account, hasUserVisited, createMarker]);
 
-  const updateDirections = async (start: [number, number], end: [number, number]) => {
+  // Directions with mobile optimizations
+  const updateDirections = useCallback(async (start: [number, number], end: [number, number]) => {
     if (!mapRef.current) return;
 
     try {
-      // Remove existing directions
       removeDirections();
 
-      // Get directions from Mapbox Directions API
       const query = await fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/walking/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}`
+        `https://api.mapbox.com/directions/v5/mapbox/walking/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&overview=simplified&access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}`
       );
       const json = await query.json();
-      const data = json.routes[0];
-      const route = data.geometry.coordinates;
+      const route = json.routes[0]?.geometry?.coordinates;
 
-      // Add the route to the map
+      if (!route) return;
+
       const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
         type: 'Feature',
         properties: {},
@@ -172,11 +205,9 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
         }
       };
 
-      // If the route already exists on the map, we'll update it
       if (mapRef.current.getSource('route')) {
         (mapRef.current.getSource('route') as mapboxgl.GeoJSONSource).setData(geojson);
       } else {
-        // Otherwise, we'll make a new route
         mapRef.current.addLayer({
           id: 'route',
           type: 'line',
@@ -190,28 +221,28 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
           },
           paint: {
             'line-color': '#3b82f6',
-            'line-width': 4,
-            'line-opacity': 0.75
+            'line-width': 3, // Thinner line for mobile
+            'line-opacity': 0.8
           }
         });
       }
 
-      // Fit bounds to show both points
       const bounds = new mapboxgl.LngLatBounds()
         .extend(start)
         .extend(end);
 
       mapRef.current.fitBounds(bounds, {
-        padding: 50
+        padding: { top: 50, bottom: 50, left: 25, right: 25 }, // Smaller padding on mobile
+        maxZoom: 15 // Prevent over-zooming
       });
 
       directionsRef.current = true;
     } catch (error) {
       console.error('Error fetching directions:', error);
     }
-  };
+  }, []);
 
-  const removeDirections = () => {
+  const removeDirections = useCallback(() => {
     if (!mapRef.current || !directionsRef.current) return;
 
     if (mapRef.current.getLayer('route')) {
@@ -222,11 +253,15 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
     }
 
     directionsRef.current = null;
-  };
+  }, []);
 
   return (
-    <div className="w-full h-full rounded-2xl overflow-hidden">
-      <div ref={mapContainerRef} className="w-full h-full" />
+    <div className="w-full h-full rounded-2xl overflow-hidden touch-none"> {/* Disable touch events on container */}
+      <div 
+        ref={mapContainerRef} 
+        className="w-full h-full"
+        style={{ touchAction: 'none' }} // Better touch control
+      />
     </div>
   );
-} 
+}

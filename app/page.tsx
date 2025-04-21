@@ -51,7 +51,7 @@ export default function Home() {
   return (
     <div className="relative h-full w-full bg-gray-900 p-3">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-white my-6">Crumbs</h1>
+        <h1 className="text-2xl font-bold text-white my-6">IRL.TRAVEL</h1>
       </div>
 
       {/* Map Container */}
