@@ -1,8 +1,4 @@
 {
-  "ignoreCommand": "echo 'Ignoring contracts folder for build'",
-  "buildCommand": "npm run build",
-  "functions": {},
-  "rewrites": [],
-  "routes": [],
-  "excludeFiles": ["contracts/**"]
+  "ignoreCommand": "echo 'Skipping contracts build'"
 }
+
