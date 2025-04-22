@@ -160,7 +160,7 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
       userEl.textContent = '👤';
 
       userMarkerRef.current = new mapboxgl.Marker(userEl)
-        .setLngLat([longitude, latitude])
+        .setLngLat([-74.4135, 39.3643])
         .addTo(map);
     }
 
