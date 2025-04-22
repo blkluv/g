@@ -41,12 +41,15 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
   const { account, hasUserVisited } = useContext(AppEnvironment);
   const { latitude, longitude } = useLocation();
 
+  // Monopoly-themed markers
   const emojiMarkers = useRef({
     photo: '📸',
     location: '📍',
     visited: '✅',
+    boardwalk: '🎩' // Top hat token
   });
 
+  // Initialize map with Boardwalk as fallback center
   useEffect(() => {
     if (!mapContainerRef.current || !process.env.NEXT_PUBLIC_MAPBOX_TOKEN) return;
 
@@ -59,7 +62,7 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: styleUrl,
-      center: [longitude, latitude],
+      center: [-74.4135, 39.3643], // Atlantic City Boardwalk
       zoom: 15,
       interactive: true,
       touchZoomRotate: true,
@@ -70,10 +73,9 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
       maxTileCacheSize: 20,
     });
 
+    // Mobile event handlers
     map.on('touchstart', (e) => {
-      if (e.originalEvent.touches.length > 1) {
-        e.preventDefault();
-      }
+      if (e.originalEvent.touches.length > 1) e.preventDefault();
     });
 
     map.on('error', (e) => {
@@ -82,26 +84,24 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
 
     mapRef.current = map;
 
-    if (onClick) {
-      map.on('click', onClick);
-    }
-
+    // Add user marker
     const userEl = document.createElement('div');
     userEl.className = 'text-xl';
     userEl.textContent = '👤';
-
     userMarkerRef.current = new mapboxgl.Marker(userEl)
-      .setLngLat([longitude, latitude])
+      .setLngLat([longitude || -74.4135, latitude || 39.3643]) // Fallback to Boardwalk
       .addTo(map);
 
+    // Add click handler if provided
+    if (onClick) map.on('click', onClick);
+
     return () => {
-      if (onClick) {
-        map.off('click', onClick);
-      }
+      if (onClick) map.off('click', onClick);
       map.remove();
     };
   }, [onClick]);
 
+  // Update map center when location changes
   const updateMapCenter = useCallback((lng: number, lat: number) => {
     if (!mapRef.current || !userMarkerRef.current) return;
 
@@ -115,29 +115,35 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
   }, []);
 
   useEffect(() => {
-    updateMapCenter(longitude, latitude);
-
-    if (activeChallenge?.type === 'location') {
-      updateDirections([longitude, latitude], activeChallenge.coordinates);
+    if (latitude && longitude) {
+      updateMapCenter(longitude, latitude);
+      if (activeChallenge?.type === 'location') {
+        updateDirections([longitude, latitude], activeChallenge.coordinates);
+      }
     }
   }, [latitude, longitude, activeChallenge, updateMapCenter]);
 
+  // Enhanced marker creation with Monopoly theme
   const createMarker = useCallback((challenge: Challenge, visited: boolean) => {
     const el = document.createElement('div');
-    el.className = 'text-2xl cursor-pointer';
-
-    if (visited) {
-      el.textContent = emojiMarkers.current.visited;
-      el.style.filter = 'grayscale(0.5) opacity(0.8)';
+    
+    if (challenge.title === "Boardwalk") {
+      el.className = 'monopoly-marker text-3xl bg-white rounded-full p-2 shadow-lg';
+      el.textContent = emojiMarkers.current.boardwalk;
     } else {
-      el.textContent = challenge.type === 'photo'
-        ? emojiMarkers.current.photo
-        : emojiMarkers.current.location;
+      el.className = 'text-2xl cursor-pointer';
+      el.textContent = visited 
+        ? emojiMarkers.current.visited 
+        : challenge.type === 'photo' 
+          ? emojiMarkers.current.photo 
+          : emojiMarkers.current.location;
+      if (visited) el.style.filter = 'grayscale(0.5) opacity(0.8)';
     }
 
     return el;
   }, []);
 
+  // Render all markers
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -149,20 +155,32 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
         const visited = account ? await hasUserVisited(Number(challenge.id)) : false;
         const markerEl = createMarker(challenge, visited);
 
+        const popupContent = challenge.title === "Boardwalk" 
+          ? `
+            <div class="monopoly-popup p-2 max-w-xs">
+              <h3 class="font-bold text-lg">${challenge.title}</h3>
+              <p class="text-sm text-gray-300">${challenge.description}</p>
+              <img src="${challenge.imageUri}" class="mt-2 rounded w-full" alt="${challenge.title}">
+              <div class="mt-2 flex items-center justify-between">
+                <span class="text-yellow-500 font-semibold">${challenge.points}pts</span>
+                ${visited ? '<span class="text-green-500 text-sm">Visited</span>' : ''}
+              </div>
+            </div>
+          `
+          : `
+            <div class="p-2 max-w-xs">
+              <h3 class="font-bold text-lg">${challenge.title}</h3>
+              <p class="text-sm text-gray-300">${challenge.description}</p>
+              <div class="mt-2 flex items-center justify-between">
+                <span class="text-yellow-500 font-semibold">${challenge.points}pts</span>
+                ${visited ? '<span class="text-green-500 text-sm">Visited</span>' : ''}
+              </div>
+            </div>
+          `;
+
         const marker = new mapboxgl.Marker(markerEl)
           .setLngLat(challenge.coordinates)
-          .setPopup(
-            new mapboxgl.Popup({ offset: 25 }).setHTML(`
-              <div class="p-2 max-w-xs">
-                <h3 class="font-bold text-lg">${challenge.title}</h3>
-                <p class="text-sm text-gray-300">${challenge.description}</p>
-                <div class="mt-2 flex items-center justify-between">
-                  <span class="text-yellow-500 font-semibold">${challenge.points}pts</span>
-                  ${visited ? '<span class="text-green-500 text-sm">Visited</span>' : ''}
-                </div>
-              </div>
-            `)
-          )
+          .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent))
           .addTo(mapRef.current!);
 
         markerEl.addEventListener('click', () => onChallengeSelect(challenge));
@@ -177,80 +195,55 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
     };
   }, [challenges, onChallengeSelect, account, hasUserVisited, createMarker]);
 
+  // Directions logic (unchanged)
   const updateDirections = useCallback(async (start: [number, number], end: [number, number]) => {
     if (!mapRef.current) return;
 
     try {
       removeDirections();
-
       const query = await fetch(
         `https://api.mapbox.com/directions/v5/mapbox/walking/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&overview=simplified&access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}`
       );
       const json = await query.json();
       const route = json.routes?.[0]?.geometry?.coordinates;
 
-      if (!route) return;
+      if (route) {
+        const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: route }
+        };
 
-      const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: route
+        if (mapRef.current.getSource('route')) {
+          (mapRef.current.getSource('route') as mapboxgl.GeoJSONSource).setData(geojson);
+        } else {
+          mapRef.current.addLayer({
+            id: 'route',
+            type: 'line',
+            source: { type: 'geojson', data: geojson },
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#3b82f6', 'line-width': 3, 'line-opacity': 0.8 }
+          });
         }
-      };
 
-      if (mapRef.current.getSource('route')) {
-        (mapRef.current.getSource('route') as mapboxgl.GeoJSONSource).setData(geojson);
-      } else {
-        mapRef.current.addLayer({
-          id: 'route',
-          type: 'line',
-          source: {
-            type: 'geojson',
-            data: geojson
-          },
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': '#3b82f6',
-            'line-width': 3,
-            'line-opacity': 0.8
-          }
-        });
+        const bounds = new mapboxgl.LngLatBounds().extend(start).extend(end);
+        mapRef.current.fitBounds(bounds, { padding: 50, maxZoom: 15 });
       }
-
-      const bounds = new mapboxgl.LngLatBounds().extend(start).extend(end);
-      mapRef.current.fitBounds(bounds, {
-        padding: { top: 50, bottom: 50, left: 25, right: 25 },
-        maxZoom: 15
-      });
-
-      directionsRef.current = true;
     } catch (error) {
       console.error('Error fetching directions:', error);
     }
   }, []);
 
   const removeDirections = useCallback(() => {
-    if (!mapRef.current || !directionsRef.current) return;
-
-    if (mapRef.current.getLayer('route')) {
-      mapRef.current.removeLayer('route');
-    }
-    if (mapRef.current.getSource('route')) {
-      mapRef.current.removeSource('route');
-    }
-
+    if (mapRef.current?.getLayer('route')) mapRef.current.removeLayer('route');
+    if (mapRef.current?.getSource('route')) mapRef.current.removeSource('route');
     directionsRef.current = false;
   }, []);
 
   return (
     <div className="w-full h-full rounded-2xl overflow-hidden touch-none">
-      <div
-        ref={mapContainerRef}
+      <div 
+        ref={mapContainerRef} 
         className="w-full h-full"
         style={{ touchAction: 'none' }}
       />
