@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useEffect, useRef, useContext } from 'react';
+import React, { useEffect, useRef, useContext, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { mapStyles } from '../app/types/map';
 import { AppEnvironment } from '@/hooks/useApp';
 import { useLocation } from '@/hooks/useLocation';
-
 
 export interface Challenge {
   id: string;
@@ -16,7 +15,6 @@ export interface Challenge {
   type: 'photo' | 'location';
   points: number;
   distance?: number;
-  // blockchain-related properties
   owner: string;
   imageUri: string;
   pathIndex: number;
@@ -48,19 +46,17 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
     if (!mapContainerRef.current || !process.env.NEXT_PUBLIC_MAPBOX_TOKEN) return;
 
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-    
-    // Get the selected style from localStorage
+
     const selectedStyle = typeof window !== 'undefined' 
       ? localStorage.getItem('mapStyle') || 'dark'
       : 'dark';
-    
-    // Find the style URL from our predefined styles
+
     const styleUrl = mapStyles.find(style => style.id === selectedStyle)?.url || 'mapbox://styles/mapbox/dark-v11';
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: styleUrl,
-      center: [-74.4135, 39.3643], // Atlantic City Boardwalk
+      center: [-74.4135, 39.3643],
       zoom: 15,
       interactive: true,
       touchZoomRotate: true,
@@ -94,9 +90,6 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
     userMarkerRef.current = new mapboxgl.Marker(userEl)
       .setLngLat([longitude, latitude])
       .addTo(map);
-
-    // Add click handler if provided
-    if (onClick) map.on('click', onClick);
 
     return () => {
       if (onClick) map.off('click', onClick);
@@ -143,46 +136,49 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
   useEffect(() => {
     if (!mapRef.current) return;
 
-    // Clear existing markers
-    Object.values(markersRef.current).forEach(marker => marker.remove());
-    markersRef.current = {};
+    const renderMarkers = async () => {
+      Object.values(markersRef.current).forEach(marker => marker.remove());
+      markersRef.current = {};
 
-      await Promise.all(challenges.map(async (challenge) => {
-        const visited = account ? await hasUserVisited(Number(challenge.id)) : false;
-        const markerEl = createMarker(challenge, visited);
+      await Promise.all(
+        challenges.map(async (challenge) => {
+          const visited = account ? await hasUserVisited(Number(challenge.id)) : false;
+          const markerEl = createMarker(challenge, visited);
 
-        const marker = new mapboxgl.Marker(markerEl)
-          .setLngLat(challenge.coordinates)
-          .setPopup(
-            new mapboxgl.Popup({ offset: 25 }).setHTML(`
-              <div class="p-2 max-w-xs">
-                <h3 class="font-bold text-lg">${challenge.title}</h3>
-                <p class="text-sm text-gray-300">${challenge.description}</p>
-                <div class="mt-2 flex items-center justify-between">
-                  <span class="text-yellow-500 font-semibold">${challenge.points}pts</span>
-                  ${visited ? '<span class="text-green-500 text-sm">Visited</span>' : ''}
+          const marker = new mapboxgl.Marker(markerEl)
+            .setLngLat(challenge.coordinates)
+            .setPopup(
+              new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                <div class="p-2 max-w-xs">
+                  <h3 class="font-bold text-lg">${challenge.title}</h3>
+                  <p class="text-sm text-gray-300">${challenge.description}</p>
+                  <div class="mt-2 flex items-center justify-between">
+                    <span class="text-yellow-500 font-semibold">${challenge.points}pts</span>
+                    ${visited ? '<span class="text-green-500 text-sm">Visited</span>' : ''}
+                  </div>
                 </div>
-              </div>
-            `)
-          )
-          .addTo(mapRef.current!);
+              `)
+            )
+            .addTo(mapRef.current!);
 
-        el.addEventListener('click', () => onChallengeSelect(challenge));
-        markersRef.current[challenge.id] = marker;
-      }
-    });
+          markerEl.addEventListener('click', () => onChallengeSelect(challenge));
+          markersRef.current[challenge.id] = marker;
+        })
+      );
+    };
+
+    renderMarkers();
 
     return () => {
       Object.values(markersRef.current).forEach(marker => marker.remove());
       markersRef.current = {};
     };
-  }, [challenges, onChallengeSelect, account, hasUserVisited]);
+  }, [challenges, onChallengeSelect, account, hasUserVisited, createMarker]);
 
   const updateDirections = useCallback(async (start: [number, number], end: [number, number]) => {
     if (!mapRef.current) return;
 
     try {
-      // Remove existing directions
       removeDirections();
 
       const query = await fetch(
@@ -235,7 +231,7 @@ export default function Map({ challenges, onChallengeSelect, activeChallenge, on
     } catch (error) {
       console.error('Error fetching directions:', error);
     }
-  };
+  }, [removeDirections]);
 
   const removeDirections = useCallback(() => {
     if (!mapRef.current || !directionsRef.current) return;
